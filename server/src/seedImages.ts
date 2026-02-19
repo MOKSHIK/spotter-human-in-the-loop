@@ -40,7 +40,7 @@ async function seedImages() {
     );
   }
 
-  console.log("✅ Image seeding complete.");
+  console.log("Image seeding complete.");
   process.exit(0);
 }
 

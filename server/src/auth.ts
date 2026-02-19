@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = "spotter_secret"; // for assessment only (use env in real apps)
+const JWT_SECRET = "spotter_secret"; // just for this assignment we will use .env in the professional environment
 
 export type JwtUser = { id: number; role: "Annotator" | "Admin"; email: string };
 

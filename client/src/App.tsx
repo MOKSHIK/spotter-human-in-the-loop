@@ -64,6 +64,7 @@ export default function App() {
     if (selectedAdminImage) {
       const res = await api.get(`/images/${selectedAdminImage.id}/labels`);
       setAdminLabels(res.data.labels);
+      console.log("cameee heerreeeeeeeeeeeeeeeeee")
     }
   }
 
@@ -216,7 +217,7 @@ export default function App() {
 
     await api.post("/labels", { imageId: image.id, boxes: transformed });
 
-    setMsg("✅ Submitted!");
+    setMsg("Submitted!");
     await loadNext();
   }
 
@@ -286,7 +287,6 @@ export default function App() {
                     <b>{selectedAdminImage.filename}</b> — labels: {adminLabels.length}
                   </div>
 
-                  {/* preview with boxes */}
                   <div style={{ position: "relative", display: "inline-block", border: "1px solid #ccc" }}>
                     <img
                       ref={adminImgRef}

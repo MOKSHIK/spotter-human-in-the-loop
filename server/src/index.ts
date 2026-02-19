@@ -14,7 +14,7 @@ app.get("/", (req, res) => {
   res.send("Spotter running");
 });
 
-// Simple login (no JWT yet)
+
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
 
@@ -97,7 +97,7 @@ app.post("/labels",requireAuth, requireRole("Annotator"), (req: any, res) => {
         [imageId],
         (err2) => {
           if (err2) return res.status(500).json({ message: "DB update error" });
-          res.json({ message: "✅ Labels saved, image marked Annotated" });
+          res.json({ message: "Labels saved, image marked Annotated" });
         }
       );
     });
