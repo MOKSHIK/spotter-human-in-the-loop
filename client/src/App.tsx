@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, setAuthToken } from "./api";
-
-type User = { id: number; email: string; role: "Annotator" | "Admin" };
-type ImageItem = { id: number; filename: string; width: number; height: number; state: string; url: string };
-type AdminImage = { id: number; filename: string; width: number; height: number; state: string; url: string };
-type Label = { id: number; xmin: number; ymin: number; xmax: number; ymax: number; created_by: number };
-
-type Box = { xmin: number; ymin: number; xmax: number; ymax: number };
+import { AuthPanel } from "./components/AuthPanel";
+import { AdminDashboard } from "./components/AdminDashboard";
+import type { AdminImage, Box, ImageItem, Label, User } from "./types";
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -22,11 +18,13 @@ export default function App() {
   const [selectedAdminImage, setSelectedAdminImage] = useState<AdminImage | null>(null);
   const [adminLabels, setAdminLabels] = useState<Label[]>([]);
 
-  // drawing state
+  // drawing refs/state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+
   const adminImgRef = useRef<HTMLImageElement | null>(null);
   const adminCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
   const [isDrawing, setIsDrawing] = useState(false);
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [current, setCurrent] = useState<Box | null>(null);
@@ -36,6 +34,28 @@ export default function App() {
     const res = await api.post("/login", { email, password });
     setUser(res.data.user);
     setAuthToken(res.data.token);
+
+    // reset per-role UI
+    setImage(null);
+    setBoxes([]);
+    setCurrent(null);
+    setAdminImages([]);
+    setSelectedAdminImage(null);
+    setAdminLabels([]);
+  }
+
+  function logout() {
+    setUser(null);
+    setAuthToken(null);
+    setEmail("");
+    setPassword("");
+    setImage(null);
+    setBoxes([]);
+    setCurrent(null);
+    setMsg("");
+    setAdminImages([]);
+    setSelectedAdminImage(null);
+    setAdminLabels([]);
   }
 
   async function loadNext() {
@@ -44,14 +64,15 @@ export default function App() {
     setCurrent(null);
     const res = await api.get("/images/next");
     setImage(res.data);
+    console.log("Cameeee eheererrererererererererer")
   }
 
   async function loadAdminImages() {
-  const res = await api.get("/admin/images", { params: { state: adminStateFilter } });
-  setAdminImages(res.data.images);
-  setSelectedAdminImage(null);
-  setAdminLabels([]);
-}
+    const res = await api.get("/admin/images", { params: { state: adminStateFilter } });
+    setAdminImages(res.data.images);
+    setSelectedAdminImage(null);
+    setAdminLabels([]);
+  }
 
   async function selectAdminImage(img: AdminImage) {
     setSelectedAdminImage(img);
@@ -64,7 +85,6 @@ export default function App() {
     if (selectedAdminImage) {
       const res = await api.get(`/images/${selectedAdminImage.id}/labels`);
       setAdminLabels(res.data.labels);
-      console.log("cameee heerreeeeeeeeeeeeeeeeee")
     }
   }
 
@@ -74,13 +94,12 @@ export default function App() {
     await loadAdminImages();
   }
 
-  // redraw canvas whenever boxes/current/image changes
+  // redraw annotator canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     const img = imgRef.current;
     if (!canvas || !img || !image) return;
 
-    // match canvas to displayed image size
     canvas.width = img.clientWidth;
     canvas.height = img.clientHeight;
 
@@ -89,55 +108,51 @@ export default function App() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // draw saved boxes
     ctx.lineWidth = 2;
     ctx.strokeStyle = "red";
     for (const b of boxes) {
       ctx.strokeRect(b.xmin, b.ymin, b.xmax - b.xmin, b.ymax - b.ymin);
     }
 
-    // draw current box being drawn
     if (current) {
       ctx.strokeStyle = "lime";
       ctx.strokeRect(current.xmin, current.ymin, current.xmax - current.xmin, current.ymax - current.ymin);
     }
   }, [boxes, current, image]);
 
+  // redraw admin overlay
   useEffect(() => {
-  const img = adminImgRef.current;
-  const canvas = adminCanvasRef.current;
-  if (!img || !canvas || !selectedAdminImage) return;
+    const img = adminImgRef.current;
+    const canvas = adminCanvasRef.current;
+    if (!img || !canvas || !selectedAdminImage) return;
 
-  // set canvas size to displayed image size
-  canvas.width = img.clientWidth;
-  canvas.height = img.clientHeight;
+    canvas.width = img.clientWidth;
+    canvas.height = img.clientHeight;
 
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // original -> displayed scale
-  const scaleX = img.clientWidth / selectedAdminImage.width;
-  const scaleY = img.clientHeight / selectedAdminImage.height;
+    const scaleX = img.clientWidth / selectedAdminImage.width;
+    const scaleY = img.clientHeight / selectedAdminImage.height;
 
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "orange";
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "orange";
 
-  for (const l of adminLabels) {
-    const x = l.xmin * scaleX;
-    const y = l.ymin * scaleY;
-    const w = (l.xmax - l.xmin) * scaleX;
-    const h = (l.ymax - l.ymin) * scaleY;
+    for (const l of adminLabels) {
+      const x = l.xmin * scaleX;
+      const y = l.ymin * scaleY;
+      const w = (l.xmax - l.xmin) * scaleX;
+      const h = (l.ymax - l.ymin) * scaleY;
 
-    ctx.strokeRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
 
-    // optional label id text
-    ctx.font = "12px sans-serif";
-    ctx.fillStyle = "orange";
-    ctx.fillText(`#${l.id}`, x + 4, y + 14);
-  }
-}, [selectedAdminImage, adminLabels]);
+      ctx.font = "12px sans-serif";
+      ctx.fillStyle = "orange";
+      ctx.fillText(`#${l.id}`, x + 4, y + 14);
+    }
+  }, [selectedAdminImage, adminLabels]);
 
   function getMousePos(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -171,7 +186,6 @@ export default function App() {
       return;
     }
 
-    // prevent tiny boxes
     if (current.xmax - current.xmin < 5 || current.ymax - current.ymin < 5) {
       setCurrent(null);
       setIsDrawing(false);
@@ -201,7 +215,6 @@ export default function App() {
       return;
     }
 
-    // Convert displayed coords → original image coords
     const displayedW = imgRef.current?.clientWidth ?? 1;
     const displayedH = imgRef.current?.clientHeight ?? 1;
 
@@ -223,138 +236,60 @@ export default function App() {
 
   return (
     <div className="app-container" style={{ fontFamily: "sans-serif", padding: 16, maxWidth: 900, margin: "0 auto" }}>
-      <h2>The Spotter (Annotator)</h2>
+      <h2>The Spotter</h2>
 
-      {!user ? (
-        <div className="card" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" type="password" />
-          <button onClick={login}>Login</button>
-        </div>
-      ) : (
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <div>
-            Logged in as <span style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  backgroundColor: user.role === "Admin" ? "#fef3c7" : "#dbeafe",
-                  color: "#333",
-                  fontSize: 12,
-                  marginLeft: 6
-                }}
-              >
-                {user.role}
-              </span>
-          </div>
-        {user.role === "Annotator" && (
-          <button onClick={loadNext}>Get Next Image</button>
-          )}
-        </div>
-      )}
-      {user?.role === "Admin" && (
-        <div className="card" style={{marginTop: 24}}>
-          <h3>Admin Dashboard</h3>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <select value={adminStateFilter} onChange={(e) => setAdminStateFilter(e.target.value as any)}>
-              <option value="Annotated">Annotated</option>
-              <option value="Verified">Verified</option>
-              <option value="Rejected">Rejected</option>
-            </select>
-            <button onClick={loadAdminImages}>Load</button>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 20, marginTop: 16 }}>
-            <div style={{ width: 320 }}>
-              <b>Images</b>
-              <div style={{ border: "1px solid #ccc", padding: 8, maxHeight: 400, overflow: "auto" }}>
-                {adminImages.map((img) => (
-                  <div key={img.id} style={{ padding: 6, cursor: "pointer" }} onClick={() => selectAdminImage(img)}>
-                    #{img.id} — {img.filename} <span style={{ opacity: 0.6 }}>({img.state})</span>
-                  </div>
-                ))}
-                {adminImages.length === 0 && <div style={{ opacity: 0.7 }}>No images loaded</div>}
-              </div>
-            </div>
-
-            <div style={{ flex: 1 }}>
-              <b>Preview</b>
-              {!selectedAdminImage ? (
-                <div style={{ opacity: 0.7, marginTop: 8 }}>Select an image to review labels</div>
-              ) : (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ marginBottom: 8 }}>
-                    <b>{selectedAdminImage.filename}</b> — labels: {adminLabels.length}
-                  </div>
-
-                  <div style={{ position: "relative", display: "inline-block", border: "1px solid #ccc" }}>
-                    <img
-                      ref={adminImgRef}
-                      src={selectedAdminImage.url}
-                      alt="admin"
-                      style={{ maxWidth: "800px", width: "100%", height: "auto", display: "block" }}
-                      onLoad={() => {
-                        // trigger redraw after image loads
-                        setAdminLabels((prev) => [...prev]);
-                      }}
-                    />
-                    <canvas
-                      ref={adminCanvasRef}
-                      style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
-                    />
-                  </div>
-
-                  <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                    <button onClick={() => setImageState("Verified")}>Mark Verified</button>
-                    <button onClick={() => setImageState("Rejected")}>Mark Rejected</button>
-                  </div>
-
-                  <div style={{ marginTop: 12 }}>
-                    <b>Labels</b>
-                    <div style={{ border: "1px solid #ccc", padding: 8 }}>
-                      {adminLabels.map((l) => (
-                        <div key={l.id} style={{ display: "flex", justifyContent: "space-between", padding: 6 }}>
-                          <span>
-                            #{l.id} [{l.xmin},{l.ymin}] → [{l.xmax},{l.ymax}]
-                          </span>
-                          <button onClick={() => deleteLabel(l.id)}>Delete</button>
-                        </div>
-                      ))}
-                      {adminLabels.length === 0 && <div style={{ opacity: 0.7 }}>No labels</div>}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <AuthPanel
+        user={user}
+        email={email}
+        password={password}
+        onEmailChange={setEmail}
+        onPasswordChange={setPassword}
+        onLogin={login}
+        onLogout={logout}
+        onGetNextImage={loadNext}
+      />
 
       {msg && <p>{msg}</p>}
 
-      {user?.role === "Annotator" && image &&(
+      {user?.role === "Admin" && (
+        <AdminDashboard
+          adminStateFilter={adminStateFilter}
+          onChangeFilter={setAdminStateFilter}
+          adminImages={adminImages}
+          selectedAdminImage={selectedAdminImage}
+          adminLabels={adminLabels}
+          onLoadAdminImages={loadAdminImages}
+          onSelectAdminImage={selectAdminImage}
+          onDeleteLabel={deleteLabel}
+          onSetImageState={setImageState}
+          adminImgRef={adminImgRef}
+          adminCanvasRef={adminCanvasRef}
+          onAdminImageLoad={() => setAdminLabels((prev) => [...prev])}
+        />
+      )}
+
+      {user?.role === "Annotator" && image && (
         <div className="card" style={{ marginTop: 20 }}>
           <div style={{ marginBottom: 8 }}>
             <b>{image.filename}</b> (original: {image.width}×{image.height}) | boxes: {boxes.length}
           </div>
 
-          <div style={{
-                position: "relative",
-                display: "inline-block",
-                borderRadius: 8,
-                overflow: "hidden",
-                border: "1px solid #e5e7eb",
-                background: "#fff"
-              }}>
+          <div
+            style={{
+              position: "relative",
+              display: "inline-block",
+              borderRadius: 8,
+              overflow: "hidden",
+              border: "1px solid #e5e7eb",
+              background: "#fff",
+            }}
+          >
             <img
               ref={imgRef}
               src={image.url}
               alt="to-annotate"
               style={{ maxWidth: "800px", width: "100%", height: "auto", display: "block" }}
-              onLoad={() => {
-                // trigger redraw after image loads
-                setBoxes((b) => [...b]);
-              }}
+              onLoad={() => setBoxes((b) => [...b])}
             />
             <canvas
               ref={canvasRef}
@@ -372,12 +307,12 @@ export default function App() {
             <button onClick={clearAll} disabled={boxes.length === 0}>
               Clear
             </button>
-            <button onClick={submit} disabled={!user || !image || boxes.length === 0}>Submit</button>
+            <button onClick={submit} disabled={!user || !image || boxes.length === 0}>
+              Submit
+            </button>
           </div>
 
-          <p style={{ fontSize: 12, opacity: 0.75 }}>
-            Green box = currently drawing. Red boxes = saved in current session.
-          </p>
+          <p style={{ fontSize: 12, opacity: 0.75 }}>Green = currently drawing. Red = saved boxes.</p>
         </div>
       )}
     </div>
